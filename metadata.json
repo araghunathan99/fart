@@ -1,0 +1,9 @@
+{
+  "name": "FART - Family Road Trip",
+  "short_name": "FART",
+  "description": "Family Road Trip (FART) - The ultimate AI-powered planner for family adventures, finding the best kid-friendly stops along your route.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "pwa": true
+}

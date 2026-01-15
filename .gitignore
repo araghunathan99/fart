@@ -1,0 +1,19 @@
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build/Deps
+node_modules/
+dist/
+build/
+.cache/
+
+# OS/IDEs
+.DS_Store
+.vscode/
+.idea/
+*.log
