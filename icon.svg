@@ -1,0 +1,33 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded Background -->
+  <rect width="512" height="512" rx="100" fill="#020617"/>
+  
+  <!-- Centered Logo Content -->
+  <g transform="translate(65, 120) scale(3.4)">
+    <!-- Exhaust Cloud (PHUT!) -->
+    <g opacity="0.6">
+      <path d="M5 60 Q-15 45 -25 65 T-5 85 T15 75 Z" fill="#475569" />
+      <circle cx="10" cy="72" r="12" fill="#334155" />
+      <circle cx="22" cy="78" r="8" fill="#1e293b" />
+    </g>
+    
+    <!-- Car Body -->
+    <path d="M25 75 L25 55 Q25 45 40 45 L95 45 Q110 45 110 55 L110 75 Z" fill="#f97316" />
+    
+    <!-- Car Roof -->
+    <path d="M40 45 L40 30 Q40 20 55 20 L100 20 Q108 20 110 30 L110 45 Z" fill="#fb923c" />
+    
+    <!-- Windows -->
+    <rect x="48" y="25" width="22" height="15" fill="#ffffff" opacity="0.4" rx="3" />
+    <rect x="75" y="25" width="22" height="15" fill="#ffffff" opacity="0.4" rx="3" />
+    
+    <!-- Wheels -->
+    <circle cx="45" cy="75" r="14" fill="#020617" />
+    <circle cx="45" cy="75" r="6" fill="#475569" />
+    <circle cx="95" cy="75" r="14" fill="#020617" />
+    <circle cx="95" cy="75" r="6" fill="#475569" />
+    
+    <!-- Text Detail -->
+    <text x="5" y="98" font-family="Inter, sans-serif" font-weight="900" font-size="18" fill="#f97316" transform="rotate(-5)">PHUT!</text>
+  </g>
+</svg>
