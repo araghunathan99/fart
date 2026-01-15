@@ -10,6 +10,11 @@ import PackingListModal from './components/PackingListModal';
 const SAVED_TRIPS_KEY = 'fart_saved_trips';
 const LAST_PLAN_ID_KEY = 'fart_last_plan_id';
 
+interface TripStopWithMeta extends TripStop {
+  dayIdx: number;
+  stopIdx: number;
+}
+
 const parseTimeToMinutes = (t: string): number => {
   if (!t) return 540; 
   const [h, m] = t.split(':').map(Number);
@@ -124,9 +129,15 @@ const App: React.FC = () => {
     }
     setIsLoading(true);
     setError(null);
-    setPlan(null);
     try {
       const result = await planTripWithAI(prefs);
+      // Automatically generate a packing list too
+      try {
+        const packing = await generatePackingList(result);
+        result.packingList = packing;
+      } catch (e) {
+        console.warn("Packing list generation failed, continuing without it.", e);
+      }
       setPlan(result);
       saveCurrentPlan(result);
     } catch (err: any) {
@@ -223,10 +234,10 @@ const App: React.FC = () => {
     saveCurrentPlan(updated);
   };
 
-  const allStops = useMemo(() => {
+  const allStops = useMemo<TripStopWithMeta[]>(() => {
     if (!plan) return [];
     return plan.days.flatMap((day, dayIdx) => 
-      day.stops.map((stop, stopIdx) => ({ ...stop, dayIdx, stopIdx }))
+      day.stops.map((stop, stopIdx) => ({ ...stop, dayIdx, stopIdx } as TripStopWithMeta))
     );
   }, [plan]);
 
@@ -281,8 +292,8 @@ const App: React.FC = () => {
           );
         })}
         {focusedStopId && (
-          <div className="absolute bottom-6 left-6 right-6 bg-slate-900 rounded-[2rem] shadow-2xl p-5 border-4 border-orange-500 z-[100] text-slate-100">
-            <button onClick={() => setFocusedStopId(null)} className="absolute -top-3 -right-3 bg-white text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-black">✕</button>
+          <div className="absolute bottom-6 left-6 right-6 bg-slate-900 rounded-[2rem] shadow-2xl p-5 border-4 border-orange-500 z-[100] text-slate-100 animate-in slide-in-from-bottom-5">
+            <button onClick={() => setFocusedStopId(null)} className="absolute -top-3 -right-3 bg-white text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-black shadow-lg">✕</button>
             <div className="flex justify-between items-start">
                <div>
                   <h3 className="font-black text-sm">{allStops.find(s => s.id === focusedStopId)?.name}</h3>
@@ -297,7 +308,7 @@ const App: React.FC = () => {
   };
 
   const SummaryView = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-slate-900 p-5 rounded-[2rem] shadow-lg border-2 border-slate-800 text-center">
           <span className="text-2xl block mb-1">🛣️</span>
@@ -340,7 +351,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setShowSavedMenu(!showSavedMenu)} className="px-3 py-1.5 bg-slate-900 text-slate-300 rounded-lg font-black text-[9px] border border-slate-800">SAVED</button>
+            <button onClick={() => setShowSavedMenu(!showSavedMenu)} className="px-3 py-1.5 bg-slate-900 text-slate-300 rounded-lg font-black text-[9px] border border-slate-800 uppercase">SAVED</button>
             {plan && (
               <div className="bg-slate-900 p-1 rounded-lg flex border border-slate-800">
                 <button onClick={() => setViewMode('summary')} className={`px-2 py-1 rounded text-[8px] font-black transition-colors ${viewMode === 'summary' ? 'bg-slate-800 text-orange-500 shadow-sm' : 'text-slate-500'}`}>SUMMARY</button>
@@ -352,15 +363,51 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {showSavedMenu && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60] flex items-start justify-center pt-24 px-4" onClick={() => setShowSavedMenu(false)}>
+          <div className="bg-slate-900 w-full max-w-md rounded-[2.5rem] border-2 border-slate-800 overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+               <h3 className="font-black text-xs uppercase tracking-widest text-orange-500">Saved Trips</h3>
+               <button onClick={() => setShowSavedMenu(false)} className="text-slate-500 font-bold text-xs uppercase">Close</button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto">
+              {savedTrips.length === 0 ? (
+                <div className="p-10 text-center text-slate-500 text-[10px] font-black uppercase tracking-widest">No saved journeys yet</div>
+              ) : (
+                savedTrips.map(t => (
+                  <button key={t.id} onClick={() => { setPlan(t); setShowSavedMenu(false); }} className="w-full p-6 text-left hover:bg-slate-800 border-b border-slate-800 last:border-0 transition-colors flex justify-between items-center group">
+                    <div>
+                      <div className="font-black text-sm text-white group-hover:text-orange-500 transition-colors">{t.tripName}</div>
+                      <div className="text-[9px] font-bold text-slate-500 uppercase mt-1">{new Date(t.lastUpdated || '').toLocaleDateString()} • {t.totalDistance}</div>
+                    </div>
+                    <span className="text-xl opacity-0 group-hover:opacity-100 transition-opacity">🚀</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-5xl mx-auto px-4 pt-4">
+        {error && (
+          <div className="bg-red-500/10 border-2 border-red-500/20 p-4 rounded-2xl mb-6 text-red-500 text-xs font-bold text-center flex items-center justify-center gap-3">
+            <span>⚠️</span> {error}
+          </div>
+        )}
+
         {!plan ? (
           <TripForm onPlan={handlePlanTrip} isLoading={isLoading} isOffline={isOffline} />
         ) : (
           <div className="space-y-6">
             <div className="bg-slate-900 text-white p-6 rounded-[2.5rem] shadow-2xl relative overflow-hidden border border-slate-800">
-              <div className={`${plan.isActive ? 'bg-green-500 shadow-lg shadow-green-500/20' : 'bg-orange-500 shadow-lg shadow-orange-500/20'} absolute top-4 right-4 px-3 py-1 rounded-full text-[8px] font-black uppercase`}>{plan.isActive ? 'Tracking' : 'Draft'}</div>
-              <h2 className="text-2xl font-black italic mb-2">{plan.tripName}</h2>
-              <div className="flex gap-4 items-center">
+              <div className="absolute top-6 right-6 flex gap-2">
+                <button onClick={() => setShowShareModal(true)} className="bg-slate-800 p-2.5 rounded-xl hover:bg-slate-700 transition-colors">🔗</button>
+                {plan.packingList && <button onClick={() => setShowPackingModal(true)} className="bg-slate-800 p-2.5 rounded-xl hover:bg-slate-700 transition-colors">🎒</button>}
+                <div className={`${plan.isActive ? 'bg-green-500 shadow-lg shadow-green-500/20' : 'bg-orange-500 shadow-lg shadow-orange-500/20'} px-3 py-1.5 rounded-full text-[8px] font-black uppercase flex items-center`}>{plan.isActive ? 'Tracking' : 'Draft'}</div>
+              </div>
+              <h2 className="text-2xl font-black italic mb-2 pr-24">{plan.tripName}</h2>
+              <div className="flex gap-4 items-center mt-4">
                 <span className="text-xs font-black text-orange-500">{progress}% COMPLETE</span>
                 <div className="h-1.5 flex-grow bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)] transition-all duration-1000" style={{ width: `${progress}%` }}></div>
@@ -369,7 +416,7 @@ const App: React.FC = () => {
             </div>
 
             {viewMode === 'list' ? (
-              <div className="space-y-12">
+              <div className="space-y-12 animate-in slide-in-from-bottom-5 duration-500">
                 {plan.days.map((day, dIdx) => (
                   <div key={dIdx} className="space-y-6">
                     <div className="flex items-center gap-3">
@@ -377,11 +424,11 @@ const App: React.FC = () => {
                       <h3 className="text-base font-black text-slate-100">{day.title}</h3>
                       <div className="flex-grow h-px bg-slate-800"></div>
                       <div className="text-[10px] font-bold text-blue-400 shrink-0">{day.weatherIcon} {day.temperatureRange}</div>
-                      <input type="time" disabled={plan.isActive} className="bg-slate-900 border-slate-800 border rounded px-2 py-1 text-[10px] font-black text-white" value={day.startTime || '09:00'} onChange={(e) => updateDayStartTime(dIdx, e.target.value)} />
+                      <input type="time" disabled={plan.isActive} className="bg-slate-900 border-slate-800 border-2 rounded-xl px-2 py-1.5 text-[10px] font-black text-white focus:border-orange-500 outline-none" value={day.startTime || '09:00'} onChange={(e) => updateDayStartTime(dIdx, e.target.value)} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       {day.stops.map((stop, sIdx) => (
-                        <div key={sIdx} onClick={() => toggleStopSelection(dIdx, sIdx)} className={`p-6 rounded-[2.5rem] border-2 transition-all cursor-pointer relative ${stop.isSelected ? (stop.isCompleted ? 'bg-slate-900 border-slate-800 opacity-60' : 'bg-slate-900 border-orange-500 shadow-2xl') : 'bg-slate-900/50 border-transparent opacity-40'}`}>
+                        <div key={stop.id || sIdx} onClick={() => toggleStopSelection(dIdx, sIdx)} className={`p-6 rounded-[2.5rem] border-2 transition-all cursor-pointer relative ${stop.isSelected ? (stop.isCompleted ? 'bg-slate-900 border-slate-800 opacity-60' : 'bg-slate-900 border-orange-500 shadow-2xl') : 'bg-slate-900/50 border-transparent opacity-40'}`}>
                           <div className="flex justify-between items-start mb-4">
                             <span className="text-3xl">📍</span>
                             <div className="text-right">
@@ -394,11 +441,13 @@ const App: React.FC = () => {
                             <span className="bg-slate-950 text-slate-400 px-2 py-1 rounded border border-slate-800">Arrive {stop.time}</span>
                             <span className="bg-orange-500/10 text-orange-500 px-2 py-1 rounded border border-orange-500/20">Duration {stop.duration}m</span>
                           </div>
-                          <div className="flex items-center gap-2 mb-5">
-                             <button disabled={plan.isActive} onClick={(e) => { e.stopPropagation(); updateStopDuration(dIdx, sIdx, Math.max(5, (stop.duration || 30) - 15)); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl text-[10px] font-black transition-colors">-15</button>
-                             <button disabled={plan.isActive} onClick={(e) => { e.stopPropagation(); updateStopDuration(dIdx, sIdx, (stop.duration || 30) + 15); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl text-[10px] font-black transition-colors">+15</button>
-                             <div className="flex-grow text-center text-[9px] font-black text-slate-500 uppercase tracking-widest">Adjust Stay</div>
-                          </div>
+                          {!plan.isActive && stop.isSelected && (
+                            <div className="flex items-center gap-2 mb-2">
+                               <button onClick={(e) => { e.stopPropagation(); updateStopDuration(dIdx, sIdx, Math.max(5, (stop.duration || 30) - 15)); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl text-[10px] font-black transition-colors">-15</button>
+                               <button onClick={(e) => { e.stopPropagation(); updateStopDuration(dIdx, sIdx, (stop.duration || 30) + 15); }} className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl text-[10px] font-black transition-colors">+15</button>
+                               <div className="flex-grow text-center text-[9px] font-black text-slate-500 uppercase tracking-widest">Adjust Stay</div>
+                            </div>
+                          )}
                           {plan.isActive && stop.isSelected && (
                             <button onClick={(e) => toggleStopCompleted(dIdx, sIdx, e)} className={`w-full py-3.5 rounded-2xl font-black text-[10px] uppercase border transition-all ${stop.isCompleted ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/30'}`}>{stop.isCompleted ? 'VISITED' : 'ARRIVED'}</button>
                           )}
@@ -433,8 +482,8 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {showShareModal && <ShareModal url={getShareableUrl(plan!)} onClose={() => setShowShareModal(false)} />}
-      {showPackingModal && <PackingListModal packingList={plan!.packingList!} onToggleItem={() => {}} onClose={() => setShowPackingModal(false)} />}
+      {showShareModal && plan && <ShareModal url={getShareableUrl(plan)} onClose={() => setShowShareModal(false)} />}
+      {showPackingModal && plan && plan.packingList && <PackingListModal packingList={plan.packingList} onToggleItem={() => {}} onClose={() => setShowPackingModal(false)} />}
     </div>
   );
 };

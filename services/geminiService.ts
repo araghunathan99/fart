@@ -2,6 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TripPreferences, TripPlan, StopType, PackingList } from "../types";
 
+const extractJSON = (text: string) => {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end !== -1) {
+    return text.substring(start, end + 1);
+  }
+  const arrayStart = text.indexOf('[');
+  const arrayEnd = text.lastIndexOf(']');
+  if (arrayStart !== -1 && arrayEnd !== -1) {
+    return text.substring(arrayStart, arrayEnd + 1);
+  }
+  return text;
+};
+
 export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
   if (!input || input.trim().length < 2) return [];
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -25,7 +39,7 @@ export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
     
     const text = response.text;
     if (!text) return [];
-    const parsed = JSON.parse(text.trim());
+    const parsed = JSON.parse(extractJSON(text.trim()));
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error("Autocomplete API Error:", error);
@@ -132,7 +146,7 @@ export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> 
     const text = response.text;
     if (!text) throw new Error("The AI returned an empty response. Please try again.");
     
-    const result = JSON.parse(text.trim());
+    const result = JSON.parse(extractJSON(text.trim()));
     
     if (result.days) {
       result.days = result.days.map((day: any) => ({
@@ -219,7 +233,7 @@ export const generatePackingList = async (plan: TripPlan): Promise<PackingList> 
     const text = response.text;
     if (!text) throw new Error("Empty response from AI");
     
-    const result = JSON.parse(text.trim());
+    const result = JSON.parse(extractJSON(text.trim()));
     result.categories = result.categories.map((cat: any) => ({
       ...cat,
       items: cat.items.map((item: any) => ({
