@@ -21,12 +21,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # Removed cache: 'npm' because it requires a package-lock.json to exist in the repo.
+          # If you want to enable caching later, commit your package-lock.json and re-add:
+          # cache: 'npm'
 
       - name: Install and Build 🔧
         run: |
           npm install
           npm run build
+          # Ensure dist exists before touching .nojekyll
+          mkdir -p dist
           touch dist/.nojekyll
 
       - name: Deploy 🚀
