@@ -16,6 +16,18 @@ const extractJSON = (text: string) => {
   return text;
 };
 
+const getApiKey = (): string => {
+  // Try standard process.env first
+  const key = process.env.API_KEY;
+  if (key && key !== 'undefined' && key.trim() !== '') return key;
+  
+  // Fallback for environment-specific global injection
+  // @ts-ignore
+  if (window.API_KEY) return window.API_KEY;
+  
+  return '';
+};
+
 const getLatLng = async (): Promise<{latitude: number, longitude: number} | null> => {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve(null);
@@ -30,8 +42,14 @@ const getLatLng = async (): Promise<{latitude: number, longitude: number} | null
 export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
   if (!input || input.trim().length < 2) return [];
   
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    console.warn("Gemini API Key missing - check your environment variables.");
+    return [];
+  }
+  
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `User is typing a location for a road trip: "${input}". 
@@ -58,7 +76,10 @@ export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
 };
 
 export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API Key not found. Please ensure you are connected to the internet and the application is properly configured.");
+  
+  const ai = new GoogleGenAI({ apiKey });
   const userLoc = await getLatLng();
   
   const destinationList = prefs.destinations.join(' then to ');
@@ -118,7 +139,6 @@ export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> 
   `;
 
   try {
-    // Note: googleMaps tool requires gemini-2.5 series and doesn't allow responseSchema/MimeType
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -143,7 +163,6 @@ export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> 
     const cleanJson = extractJSON(text.trim());
     const result = JSON.parse(cleanJson);
     
-    // Extract grounding sources for UI transparency
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const mapSources = groundingChunks
       .filter((c: any) => c.maps)
@@ -180,7 +199,8 @@ export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> 
 };
 
 export const generatePackingList = async (plan: TripPlan): Promise<PackingList> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  const ai = new GoogleGenAI({ apiKey });
   
   const weatherContext = plan.days.map(d => `Day ${d.dayNumber}: ${d.weatherSummary} (${d.temperatureRange})`).join(', ');
   const ageContext = plan.preferences?.ageGroups.join(', ') || 'General family';

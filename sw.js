@@ -1,17 +1,7 @@
 
-const CACHE_NAME = 'fart-cache-v4';
-
-const PRECACHE_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon.svg'
-];
+const CACHE_NAME = 'fart-cache-v5';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS))
-  );
   self.skipWaiting();
 });
 
@@ -27,36 +17,35 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  // Navigation request (App Shell pattern)
-  // For any page navigation, serve the cached index.html
+  const url = new URL(event.request.url);
+
+  // Navigation requests: Try the network, fallback to cached index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('./index.html').then((response) => {
-        return response || fetch(event.request);
-      })
+      fetch(event.request).catch(() => caches.match('./index.html'))
     );
     return;
   }
 
-  // Standard stale-while-revalidate for other assets
+  // Assets: Stale-while-revalidate strategy
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      }).catch(() => {
-        // Silently fail if offline and not in cache
-      });
+      if (cachedResponse) return cachedResponse;
 
-      return cachedResponse || fetchPromise;
+      return fetch(event.request).then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+
+        return networkResponse;
+      });
     })
   );
 });
