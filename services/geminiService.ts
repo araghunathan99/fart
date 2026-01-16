@@ -15,18 +15,6 @@ const extractJSON = (text: string) => {
   return text;
 };
 
-const getApiKey = (): string => {
-  // Check process.env (Standard Vite/SDK approach)
-  if (process.env.API_KEY && process.env.API_KEY !== 'undefined') {
-    return process.env.API_KEY;
-  }
-  // Check global window as a fallback for specific host environments
-  // @ts-ignore
-  if (window.API_KEY) return window.API_KEY;
-  
-  return "";
-};
-
 const getLatLng = async (): Promise<{latitude: number, longitude: number} | null> => {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve(null);
@@ -39,13 +27,8 @@ const getLatLng = async (): Promise<{latitude: number, longitude: number} | null
 };
 
 export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
-  if (!input || input.trim().length < 2) return [];
-  
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    console.error("Gemini API Key missing during Autocomplete call.");
-    return [];
-  }
+  const apiKey = process.env.API_KEY;
+  if (!input || input.trim().length < 2 || !apiKey) return [];
   
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -75,9 +58,9 @@ export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
 };
 
 export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> => {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("API Key missing. Please refresh or contact support.");
-  
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API Key not found in environment.");
+
   const ai = new GoogleGenAI({ apiKey });
   const userLoc = await getLatLng();
   
@@ -198,7 +181,9 @@ export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> 
 };
 
 export const generatePackingList = async (plan: TripPlan): Promise<PackingList> => {
-  const apiKey = getApiKey();
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API Key not found");
+
   const ai = new GoogleGenAI({ apiKey });
   
   const weatherContext = plan.days.map(d => `Day ${d.dayNumber}: ${d.weatherSummary} (${d.temperatureRange})`).join(', ');
