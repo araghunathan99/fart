@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { TripPreferences, TripPlan, StopType, PackingList } from "../types";
 
@@ -17,15 +16,15 @@ const extractJSON = (text: string) => {
 };
 
 const getApiKey = (): string => {
-  // Try standard process.env first
-  const key = process.env.API_KEY;
-  if (key && key !== 'undefined' && key.trim() !== '') return key;
-  
-  // Fallback for environment-specific global injection
+  // Check process.env (Standard Vite/SDK approach)
+  if (process.env.API_KEY && process.env.API_KEY !== 'undefined') {
+    return process.env.API_KEY;
+  }
+  // Check global window as a fallback for specific host environments
   // @ts-ignore
   if (window.API_KEY) return window.API_KEY;
   
-  return '';
+  return "";
 };
 
 const getLatLng = async (): Promise<{latitude: number, longitude: number} | null> => {
@@ -44,7 +43,7 @@ export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
   
   const apiKey = getApiKey();
   if (!apiKey) {
-    console.warn("Gemini API Key missing - check your environment variables.");
+    console.error("Gemini API Key missing during Autocomplete call.");
     return [];
   }
   
@@ -77,7 +76,7 @@ export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
 
 export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> => {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error("API Key not found. Please ensure you are connected to the internet and the application is properly configured.");
+  if (!apiKey) throw new Error("API Key missing. Please refresh or contact support.");
   
   const ai = new GoogleGenAI({ apiKey });
   const userLoc = await getLatLng();

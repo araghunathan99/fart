@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'fart-cache-v5';
+const CACHE_NAME = 'fart-cache-v6';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -21,7 +21,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Navigation requests: Try the network, fallback to cached index.html
+  // Navigation requests: Try network first to ensure fresh data, then fallback to cache
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => caches.match('./index.html'))
@@ -29,23 +29,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Assets: Stale-while-revalidate strategy
+  // Assets and everything else: Stale-While-Revalidate
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
         return networkResponse;
+      }).catch(() => {
+        // Just fail silently if both fail
       });
+
+      return cachedResponse || fetchPromise;
     })
   );
 });
