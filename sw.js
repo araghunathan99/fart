@@ -1,12 +1,11 @@
 
-const CACHE_NAME = 'fart-cache-v3';
+const CACHE_NAME = 'fart-cache-v4';
 
-// Files to cache immediately on install
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  'https://cdn-icons-png.flaticon.com/512/2830/2830305.png'
+  './icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -31,11 +30,21 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  // Stale-while-revalidate strategy
+  // Navigation request (App Shell pattern)
+  // For any page navigation, serve the cached index.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match('./index.html').then((response) => {
+        return response || fetch(event.request);
+      })
+    );
+    return;
+  }
+
+  // Standard stale-while-revalidate for other assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Cache successful responses
         if (networkResponse && networkResponse.status === 200) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -44,7 +53,7 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // If offline and not in cache, you could return an offline page here
+        // Silently fail if offline and not in cache
       });
 
       return cachedResponse || fetchPromise;

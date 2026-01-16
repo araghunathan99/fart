@@ -5,13 +5,15 @@
     <meta charset="utf-8">
     <title>FART - Family Road Trip Planner</title>
     <script type="text/javascript">
-      // Simple redirect for SPA on GitHub Pages
-      // This allows direct URL navigation to work correctly
+      // GitHub Pages SPA router hack
+      // See: https://github.com/rafgraph/spa-github-pages
+      var pathSegmentsToKeep = 1;
+
       var l = window.location;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1).join('/') + '/?p=/' +
-        l.pathname.split('/').slice(1).join('/').replace(/&/g, '~and~') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?p=/' +
+        l.pathname.split('/').slice(1 + pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
         (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
         l.hash
       );
