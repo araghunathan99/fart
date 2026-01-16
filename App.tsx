@@ -46,7 +46,7 @@ const FartLogo = ({ size = "w-12 h-12" }: { size?: string }) => (
       <circle cx="95" cy="75" r="14" fill="#020617" />
       <circle cx="95" cy="75" r="6" fill="#475569" />
       <rect x="15" y="70" width="15" height="6" fill="#334155" rx="3" />
-      <text x="0" y="98" fontSize="18" fontWeight="900" fill="#f97316" transform="rotate(-5)" className="italic tracking-tighter">PHUT!</text>
+      <text x="0" y="98" fontSize="18" fontStyle="italic" fontWeight="900" fill="#f97316" transform="rotate(-5)" className="tracking-tighter">PHUT!</text>
     </svg>
   </div>
 );
@@ -131,12 +131,11 @@ const App: React.FC = () => {
     setError(null);
     try {
       const result = await planTripWithAI(prefs);
-      // Automatically generate a packing list too
       try {
         const packing = await generatePackingList(result);
         result.packingList = packing;
       } catch (e) {
-        console.warn("Packing list generation failed, continuing without it.", e);
+        console.warn("Packing list skipped.", e);
       }
       setPlan(result);
       saveCurrentPlan(result);
@@ -266,8 +265,8 @@ const App: React.FC = () => {
     const maxLat = Math.max(...stopsWithCoords.map(s => s.lat!));
     const minLng = Math.min(...stopsWithCoords.map(s => s.lng!));
     const maxLng = Math.max(...stopsWithCoords.map(s => s.lng!));
-    const latRange = maxLat - minLat || 0.1;
-    const lngRange = maxLng - minLng || 0.1;
+    const latRange = (maxLat - minLat) || 0.1;
+    const lngRange = (maxLng - minLng) || 0.1;
 
     return (
       <div className="relative w-full h-[550px] bg-slate-950 rounded-[2.5rem] border-4 border-slate-900 shadow-2xl overflow-hidden">
@@ -336,6 +335,24 @@ const App: React.FC = () => {
           ))}
         </div>
       </div>
+      {plan?.sources && plan.sources.length > 0 && (
+        <div className="bg-slate-900 rounded-[2.5rem] p-6 shadow-xl border-2 border-slate-800">
+          <h3 className="text-xs font-black uppercase tracking-[0.2em] mb-4 text-orange-500">Grounding Sources</h3>
+          <div className="flex flex-wrap gap-2">
+            {plan.sources.map((src, i) => (
+              <a 
+                key={i} 
+                href={src.uri} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="bg-slate-800 px-3 py-2 rounded-xl text-[9px] font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-colors border border-slate-700"
+              >
+                🗺️ {src.title || 'Google Maps Link'}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 

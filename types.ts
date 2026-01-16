@@ -89,4 +89,5 @@ export interface TripPlan {
   isActive: boolean;
   packingList?: PackingList;
   preferences?: TripPreferences;
+  sources?: { title: string; uri: string }[];
 }

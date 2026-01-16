@@ -16,18 +16,28 @@ const extractJSON = (text: string) => {
   return text;
 };
 
+const getLatLng = async (): Promise<{latitude: number, longitude: number} | null> => {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 5000 }
+    );
+  });
+};
+
 export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
   if (!input || input.trim().length < 2) return [];
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `User is typing a location for a road trip planner: "${input}". 
+      contents: `User is typing a location for a road trip: "${input}". 
       Provide 5 diverse and real-world location suggestions. 
-      Include a mix of specific street addresses, famous landmarks, parks, and city names. 
       Return ONLY a JSON array of strings. 
-      Example format: ["Central Park, New York, NY", "1600 Pennsylvania Avenue NW, Washington, DC", "Disneyland Park, Anaheim, CA"].`,
+      Example: ["Central Park, New York, NY", "Grand Canyon, AZ"].`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -49,105 +59,99 @@ export const getPlaceSuggestions = async (input: string): Promise<string[]> => {
 
 export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const userLoc = await getLatLng();
   
   const destinationList = prefs.destinations.join(' then to ');
   const prompt = `
     ACT AS: A world-class family travel expert and logistical master.
-    TASK: Plan a detailed, fun, and safe road trip itinerary.
+    TASK: Plan a detailed, fun, and safe road trip itinerary using REAL-TIME data.
     ROUTE: Starting from "${prefs.source}" and visiting "${destinationList}".
     
     CONTEXT:
-    - START DATE: ${prefs.startDate}.
-    - START TIME: ${prefs.startTime}.
-    - Family consists of kids in these age groups: ${prefs.ageGroups.join(', ')}.
+    - Family consists of kids ages: ${prefs.ageGroups.join(', ')}.
     - Must-have stop categories: ${prefs.stopTypes.join(', ')}.
     - Driving constraints: Max ${prefs.dailyDriveLimit} hours of driving per day.
-    - Rest frequency: Mandatory stop every ${prefs.maxLegDuration} hours.
     
-    LOGIC FOR CHOOSING STOPS (STRICT ORDER):
-    1. OPERATING HOURS: Only select stops verified to be OPEN during suggested window.
-    2. QUALITY & POPULARITY: Prioritize stops with the highest Weighted Review Score.
-    3. DRIVING TIMES: Estimate driving time to the NEXT stop.
-    4. GEOLOCATION: You MUST provide precise latitude and longitude for EVERY stop.
-    5. TIME FORMATTING: All "time" fields for stops MUST be in HH:MM (24-hour) format (e.g., 09:15, 14:30).
-    6. DURATION: For each stop, estimate a realistic "duration" in minutes.
+    REQUIREMENTS:
+    1. Use Google Maps data to verify locations.
+    2. Provide precise lat/lng for every stop.
+    3. All "time" fields MUST be in HH:MM (24-hour) format.
+    4. Estimate realistic durations in minutes.
     
-    WEATHER REQUIREMENTS (CRITICAL):
-    - Provide accurate High/Low temperatures for each Day.
-    - FOR EVERY INDIVIDUAL STOP: Provide a specific temperature estimate for that time of day, a matching emoji weatherIcon (e.g. ☀️, ⛅, 🌧️, ☁️, 🌦️, 🌩️), and a specific weatherSummary (e.g. "Sunny", "Partly Cloudy", "Passing Showers"). 
-    - Don't just repeat the same weather for every stop on a day; make it feel dynamic and localized.
-    
-    Return the plan as a valid JSON object matching the requested schema.
+    RETURN FORMAT: You MUST return a single valid JSON object. Do not include any text outside the JSON.
+    The JSON structure MUST be:
+    {
+      "summary": "...",
+      "totalDistance": "...",
+      "totalDuration": "...",
+      "days": [
+        {
+          "dayNumber": 1,
+          "title": "...",
+          "daySummary": "...",
+          "date": "${prefs.startDate}",
+          "startTime": "${prefs.startTime}",
+          "weatherSummary": "Sunny",
+          "weatherIcon": "☀️",
+          "temperatureRange": "75F - 82F",
+          "stops": [
+            {
+              "name": "...",
+              "address": "...",
+              "lat": 0.0,
+              "lng": 0.0,
+              "description": "...",
+              "time": "HH:MM",
+              "duration": 60,
+              "rating": 4.5,
+              "openingHours": "...",
+              "temperature": "78F",
+              "weatherIcon": "☀️",
+              "weatherSummary": "Sunny",
+              "reviewCount": 100,
+              "driveTimeToNext": "30 mins"
+            }
+          ]
+        }
+      ]
+    }
   `;
 
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      summary: { type: Type.STRING },
-      totalDistance: { type: Type.STRING },
-      totalDuration: { type: Type.STRING },
-      days: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            dayNumber: { type: Type.INTEGER },
-            title: { type: Type.STRING },
-            daySummary: { type: Type.STRING },
-            date: { type: Type.STRING },
-            startTime: { type: Type.STRING },
-            weatherSummary: { type: Type.STRING },
-            weatherIcon: { type: Type.STRING },
-            temperatureRange: { type: Type.STRING },
-            stops: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  name: { type: Type.STRING },
-                  type: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  address: { type: Type.STRING },
-                  lat: { type: Type.NUMBER },
-                  lng: { type: Type.NUMBER },
-                  time: { type: Type.STRING },
-                  duration: { type: Type.INTEGER },
-                  rating: { type: Type.NUMBER },
-                  reviewCount: { type: Type.INTEGER },
-                  reviewSnippet: { type: Type.STRING },
-                  openingHours: { type: Type.STRING },
-                  temperature: { type: Type.STRING },
-                  weatherSummary: { type: Type.STRING },
-                  weatherIcon: { type: Type.STRING },
-                  driveTimeToNext: { type: Type.STRING }
-                },
-                required: ["name", "address", "lat", "lng", "description", "time", "duration", "rating", "openingHours", "temperature", "weatherIcon", "weatherSummary", "reviewCount", "driveTimeToNext"]
-              }
-            }
-          },
-          required: ["dayNumber", "title", "daySummary", "stops", "date", "startTime", "temperatureRange", "weatherIcon", "weatherSummary"]
-        }
-      }
-    },
-    required: ["summary", "days", "totalDistance", "totalDuration"]
-  };
-
   try {
+    // Note: googleMaps tool requires gemini-2.5 series and doesn't allow responseSchema/MimeType
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema
+        tools: [{ googleMaps: {} }],
+        ...(userLoc && {
+          toolConfig: {
+            retrievalConfig: {
+              latLng: {
+                latitude: userLoc.latitude,
+                longitude: userLoc.longitude
+              }
+            }
+          }
+        })
       },
     });
 
     const text = response.text;
-    if (!text) throw new Error("The AI returned an empty response. Please try again.");
+    if (!text) throw new Error("The AI returned an empty response.");
     
-    const result = JSON.parse(extractJSON(text.trim()));
+    const cleanJson = extractJSON(text.trim());
+    const result = JSON.parse(cleanJson);
     
+    // Extract grounding sources for UI transparency
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const mapSources = groundingChunks
+      .filter((c: any) => c.maps)
+      .map((c: any) => ({
+        title: c.maps.title,
+        uri: c.maps.uri
+      }));
+
     if (result.days) {
       result.days = result.days.map((day: any) => ({
         ...day,
@@ -166,11 +170,12 @@ export const planTripWithAI = async (prefs: TripPreferences): Promise<TripPlan> 
       tripName: `${prefs.source.split(',')[0]} to ${prefs.destinations[prefs.destinations.length - 1].split(',')[0]}`,
       lastUpdated: new Date().toISOString(),
       isActive: false,
-      preferences: prefs
+      preferences: prefs,
+      sources: mapSources
     } as TripPlan;
   } catch (error: any) {
     console.error("Planning API Error:", error);
-    throw new Error("We hit a roadblock while planning your trip. Please check your locations and try again.");
+    throw new Error("API Connection Error: Ensure you have a valid internet connection and try again.");
   }
 };
 
@@ -184,41 +189,12 @@ export const generatePackingList = async (plan: TripPlan): Promise<PackingList> 
     ACT AS: A family travel organization expert.
     TASK: Generate a comprehensive packing list for a road trip.
     TRIP SUMMARY: ${plan.summary}
-    WEATHER FORECAST: ${weatherContext}
-    FAMILY AGES: ${ageContext}
+    WEATHER: ${weatherContext}
+    FAMILY: ${ageContext}
     
-    CATEGORIES: Clothing, Kids Essentials, Car Gear, Health & Hygiene, Fun & Entertainment.
+    CATEGORIES: Clothing, Kids Essentials, Car Gear, Health, Fun.
     Return ONLY a JSON object with a "categories" array.
   `;
-
-  const schema = {
-    type: Type.OBJECT,
-    properties: {
-      categories: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  name: { type: Type.STRING },
-                  reason: { type: Type.STRING }
-                },
-                required: ["id", "name"]
-              }
-            }
-          },
-          required: ["name", "items"]
-        }
-      }
-    },
-    required: ["categories"]
-  };
 
   try {
     const response = await ai.models.generateContent({
@@ -226,12 +202,36 @@ export const generatePackingList = async (plan: TripPlan): Promise<PackingList> 
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        responseSchema: schema
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            categories: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  items: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        reason: { type: Type.STRING }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
     });
 
     const text = response.text;
-    if (!text) throw new Error("Empty response from AI");
+    if (!text) throw new Error("Empty response");
     
     const result = JSON.parse(extractJSON(text.trim()));
     result.categories = result.categories.map((cat: any) => ({
@@ -245,7 +245,7 @@ export const generatePackingList = async (plan: TripPlan): Promise<PackingList> 
 
     return result as PackingList;
   } catch (error) {
-    console.error("Packing List Generation Error:", error);
+    console.error("Packing List Error:", error);
     throw error;
   }
 };
